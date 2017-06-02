@@ -1,9 +1,7 @@
 #!/usr/bin/python
 
 import sys
-
-print 'Number of arguments:', len(sys.argv), 'arguments.'
-print 'Argument List:', str(sys.argv)
+from socket import *
 
 mode = ""
 nickname = ""
@@ -13,8 +11,9 @@ cPort = 0
 
 goodArgs = True
 
-#Client: UdpChat.py -c hello 1.1.1.1 1234 1235
-#Server: UdpChat.py -s 1234
+# argument parser
+# Client: UdpChat.py -c hello 127.0.0.1 6000 6060
+# Server: UdpChat.py -s 1234
 if len(sys.argv) > 1:
     if sys.argv[1] == "-s":
         #server mode
@@ -81,7 +80,23 @@ if goodArgs is False:
 
 
 if mode == "server":
-    #TODO
-    print "do something in server mode"
+    sSocket = socket(AF_INET, SOCK_DGRAM)
+    sSocket.bind(('', sPort))
+
+    while True:
+        message, clientip = sSocket.recvfrom(1024)
+        print "client: ", clientip
+        print "message: ", message
+        sSocket.sendto("i got your message!", clientip)
+
 elif mode == "client":
-    print ">>> "
+    cSocket = socket(AF_INET, SOCK_DGRAM)
+    cSocket.settimeout(.5)
+    cSocket.bind(('', cPort))
+    cSocket.sendto("register me please!", (serverip,sPort))
+    try:
+        data, server = cSocket.recvfrom(1024)
+        print "server: ", serverip
+        print "data: ", data
+    except timeout:
+        print 'REQUEST TIMED OUT'
