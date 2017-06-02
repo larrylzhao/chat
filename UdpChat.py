@@ -80,23 +80,45 @@ if goodArgs is False:
 
 
 if mode == "server":
+    clientTable = {}
+
     sSocket = socket(AF_INET, SOCK_DGRAM)
     sSocket.bind(('', sPort))
 
     while True:
-        message, clientip = sSocket.recvfrom(1024)
-        print "client: ", clientip
-        print "message: ", message
-        sSocket.sendto("i got your message!", clientip)
+        data, client = sSocket.recvfrom(1024)
+        print "client: ", client
+        print "data: ", data
+
+        dataSplit = data.split(":")
+        action = dataSplit[0]
+        nickname = dataSplit[1]
+        if action == "reg":
+            #check if nickname exists and is active
+            if nickname in clientTable.keys():
+                if clientTable[nickname]['active'] == True:
+                    sSocket.sendto("Client " + nickname + " exists!" , client)
+                else:
+                    clientTable[nickname]['active'] == True
+            else:
+                #add new client to table
+                clientInfo = {
+                    'ip':client[0],
+                    'port':client[1],
+                    'active':True
+                }
+                clientTable[nickname] = clientInfo
+            print clientTable
+        sSocket.sendto("i got your message!", client)
 
 elif mode == "client":
     cSocket = socket(AF_INET, SOCK_DGRAM)
     cSocket.settimeout(.5)
     cSocket.bind(('', cPort))
-    cSocket.sendto("register me please!", (serverip,sPort))
+    cSocket.sendto("reg:" + nickname, (serverip,sPort))
     try:
         data, server = cSocket.recvfrom(1024)
-        print "server: ", serverip
+        print "server: ", server
         print "data: ", data
     except timeout:
         print 'REQUEST TIMED OUT'
