@@ -2,6 +2,7 @@
 
 import sys
 from socket import *
+import thread
 
 mode = ""
 nickname = ""
@@ -11,9 +12,13 @@ cPort = 0
 
 goodArgs = True
 
+def listen():
+    print "listening thread!"
+    print "cPort: " + cPort
+
 # argument parser
-# Client: UdpChat.py -c hello 127.0.0.1 6000 6060
-# Server: UdpChat.py -s 1234
+# Client: UdpChat.py -c client1 127.0.0.1 6000 6060
+# Server: UdpChat.py -s 6000
 if len(sys.argv) > 1:
     if sys.argv[1] == "-s":
         #server mode
@@ -113,7 +118,7 @@ if mode == "server":
 
 elif mode == "client":
     cSocket = socket(AF_INET, SOCK_DGRAM)
-    cSocket.settimeout(.5)
+    # cSocket.settimeout(.5)
     cSocket.bind(('', cPort))
     cSocket.sendto("reg:" + nickname, (serverip,sPort))
     try:
@@ -121,4 +126,13 @@ elif mode == "client":
         print "server: ", server
         print "data: ", data
     except timeout:
-        print 'REQUEST TIMED OUT'
+        print 'REGISTRATION REQUEST TIMEOUT'
+
+    # while True:
+    #     message = raw_input('>>> ')
+    #     data, server = cSocket.recvfrom(1024)
+    #     print "server: ", server
+    #     print "data: ", data
+    print "try thread"
+    thread.start_new_thread(listen, ())
+
