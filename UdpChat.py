@@ -2,23 +2,44 @@
 
 import sys
 from socket import *
-import thread
+import threading
+import time
+import json
 
 mode = ""
 nickname = ""
 serverip = ""
 sPort = 0
 cPort = 0
+clientTable = {}
 
+def client_listen():
+    cSocket = socket(AF_INET, SOCK_DGRAM)
+    cSocket.bind(('', cPort))
+    while True:
+        data, server = cSocket.recvfrom(1024)
+        dataSplit = data.split(";")
+        clientTable = json.loads(dataSplit[1])
+        print dataSplit[0]
+        print clientTable
+        sys.stdout.write(">>> ")
+        sys.stdout.flush()
+
+def server_clientTable_push():
+    pushSocket = socket(AF_INET, SOCK_DGRAM)
+    for client in clientTable:
+        if clientTable[client]['active'] is True:
+            pushSocket.sendto("[Client table updated.];" + json.dumps(clientTable), (clientTable[client]['ip'], clientTable[client]['port']))
+    pushSocket.close()
+
+"""
+argument parser
+./UdpChat.py -c client1 127.0.0.1 6000 6061
+./UdpChat.py -c client2 127.0.0.1 6000 6062
+./UdpChat.py -c client3 127.0.0.1 6000 6063
+./UdpChat.py -s 6000
+"""
 goodArgs = True
-
-def listen():
-    print "listening thread!"
-    print "cPort: " + cPort
-
-# argument parser
-# Client: UdpChat.py -c client1 127.0.0.1 6000 6060
-# Server: UdpChat.py -s 6000
 if len(sys.argv) > 1:
     if sys.argv[1] == "-s":
         #server mode
@@ -85,8 +106,6 @@ if goodArgs is False:
 
 
 if mode == "server":
-    clientTable = {}
-
     sSocket = socket(AF_INET, SOCK_DGRAM)
     sSocket.bind(('', sPort))
 
@@ -102,7 +121,7 @@ if mode == "server":
             #check if nickname exists and is active
             if nickname in clientTable.keys():
                 if clientTable[nickname]['active'] == True:
-                    sSocket.sendto("Client " + nickname + " exists!" , client)
+                    sSocket.sendto("[Client " + nickname + " exists!];" + json.dumps(clientTable), client)
                 else:
                     clientTable[nickname]['active'] == True
             else:
@@ -113,26 +132,36 @@ if mode == "server":
                     'active':True
                 }
                 clientTable[nickname] = clientInfo
-            print clientTable
-        sSocket.sendto("i got your message!", client)
+                sSocket.sendto("[Welcome, You are registered.];" + json.dumps(clientTable), client)
+                server_clientTable_push()
 
 elif mode == "client":
     cSocket = socket(AF_INET, SOCK_DGRAM)
-    # cSocket.settimeout(.5)
+    cSocket.settimeout(10)
     cSocket.bind(('', cPort))
     cSocket.sendto("reg:" + nickname, (serverip,sPort))
     try:
         data, server = cSocket.recvfrom(1024)
-        print "server: ", server
-        print "data: ", data
+        cSocket.close()
+        dataSplit = data.split(";")
+        clientTable = json.loads(dataSplit[1])
+        print ">>> " + str(dataSplit[0])
+        print ">>> [Client table updated.]"
+        # print clientTable
     except timeout:
-        print 'REGISTRATION REQUEST TIMEOUT'
+        print 'REGISTRATION REQUEST TIMED OUT AFTER 10 SECONDS'
 
-    # while True:
-    #     message = raw_input('>>> ')
-    #     data, server = cSocket.recvfrom(1024)
-    #     print "server: ", server
-    #     print "data: ", data
-    print "try thread"
-    thread.start_new_thread(listen, ())
+    try:
+        t = threading.Thread(target=client_listen, args = ())
+        t.daemon = True
+        t.start()
 
+        while True:
+            message = raw_input('>>> ')
+            print "message: " + message
+            # data, server = cSocket.recvfrom(1024)
+            # print "server: ", server
+            # print "data: ", data
+    except (KeyboardInterrupt, SystemExit):
+        print "\nexiting"
+        exit()
