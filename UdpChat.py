@@ -1,10 +1,11 @@
 #!/usr/bin/python
 
 import sys
-from socket import *
 import threading
 import time
+import re
 import json
+from socket import *
 
 mode = ""
 nickname = ""
@@ -14,16 +15,43 @@ cPort = 0
 clientTable = {}
 
 def client_listen():
-    cSocket = socket(AF_INET, SOCK_DGRAM)
-    cSocket.bind(('', cPort))
+    global clientTable
+    listensocket = socket(AF_INET, SOCK_DGRAM)
+    listensocket.bind(('', cPort))
     while True:
-        data, server = cSocket.recvfrom(1024)
-        dataSplit = data.split(";")
-        clientTable = json.loads(dataSplit[1])
-        print dataSplit[0]
+        data, server = listensocket.recvfrom(1024)
+        datasplit = data.split(";")
+        clientTable = json.loads(datasplit[1])
+        print datasplit[0]
         print clientTable
         sys.stdout.write(">>> ")
         sys.stdout.flush()
+
+def client_message():
+    while True:
+        input = raw_input('>>> ')
+        find = re.search('(\S*)', input)
+        if find:
+            command = find.group(1)
+            if command == "chat":
+                find = re.search('\S* (\S*)', input)
+                if find:
+                    recipient = find.group(1)
+                    if recipient == nickname:
+                        print "Cannot send message to yourself."
+                    elif recipient in clientTable.keys():
+                        find = re.search('\S* \S* (.+)', input)
+                        if find:
+                            message = find.group(1)
+                            print "message: " + message
+                        else:
+                            print "Please provide a message to the recipient."
+                    else:
+                        print "Invalid recipient name."
+                else:
+                    print "Invalid recipient name."
+            else:
+                print "<"+ command + "> is not a recognized command."
 
 def server_clientTable_push():
     pushSocket = socket(AF_INET, SOCK_DGRAM)
@@ -143,25 +171,22 @@ elif mode == "client":
     try:
         data, server = cSocket.recvfrom(1024)
         cSocket.close()
-        dataSplit = data.split(";")
-        clientTable = json.loads(dataSplit[1])
-        print ">>> " + str(dataSplit[0])
+        datasplit = data.split(";")
+        clientTable = json.loads(datasplit[1])
+        print ">>> " + str(datasplit[0])
         print ">>> [Client table updated.]"
         # print clientTable
     except timeout:
         print 'REGISTRATION REQUEST TIMED OUT AFTER 10 SECONDS'
+        exit()
 
     try:
-        t = threading.Thread(target=client_listen, args = ())
-        t.daemon = True
-        t.start()
+        clientListenThread = threading.Thread(target=client_listen, args = ())
+        clientListenThread.daemon = True
+        clientListenThread.start()
 
-        while True:
-            message = raw_input('>>> ')
-            print "message: " + message
-            # data, server = cSocket.recvfrom(1024)
-            # print "server: ", server
-            # print "data: ", data
+        client_message()
+
     except (KeyboardInterrupt, SystemExit):
         print "\nexiting"
         exit()
