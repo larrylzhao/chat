@@ -40,7 +40,7 @@ def client_listen():
 
 
 
-def client_chat():
+def client_commands():
     global recipient
     while True:
         input = raw_input('>>> ')
@@ -54,30 +54,96 @@ def client_chat():
                     if recipient == nickname:
                         print "Cannot send message to yourself."
                     elif recipient in clientTable.keys():
-                        find = re.search('\S* \S* (.+)', input)
-                        if find:
-                            message = "CHAT;" + nickname + ";" + find.group(1)
-                            recipientip = clientTable[recipient]['ip']
-                            recipientport = clientTable[recipient]['port']
-                            chatsocket = socket(AF_INET, SOCK_DGRAM)
-                            chatsocket.settimeout(.5) #TODO fix errno 35
-                            chatsocket.sendto(message, (recipientip,recipientport))
-                            try:
-                                data, sender = chatsocket.recvfrom(1024)
-                            except timeout:
-                                print "No ACK from " + recipient + ", message sent to server."
-                                #TODO send offline message to server
+                        if clientTable[recipient]['active'] is True:
+                            find = re.search('\S* \S* (.+)', input)
+                            if find:
+                                message = "CHAT;" + nickname + ";" + find.group(1)
+                                recipientip = clientTable[recipient]['ip']
+                                recipientport = clientTable[recipient]['port']
+                                chatsocket = socket(AF_INET, SOCK_DGRAM)
+                                chatsocket.settimeout(.5)
+                                chatsocket.sendto(message, (recipientip, recipientport))
+                                try:
+                                    data, sender = chatsocket.recvfrom(1024)
+                                except timeout:
+                                    print "No ACK from <" + recipient + ">, message sent to server."
+                                    #TODO send offline message to server
+                                else:
+                                    for name in clientTable:
+                                        if sender[0] == clientTable[name]['ip'] and sender[1] == clientTable[name]['port']:
+                                            print "[Message received by <" + name + ">]."
+                                chatsocket.close()
                             else:
-                                for name in clientTable:
-                                    if sender[0] == clientTable[name]['ip'] and sender[1] == clientTable[name]['port']:
-                                        print "[Message received by <" + name + ">]."
-                            chatsocket.close()
+                                print "Please provide a message to the recipient."
                         else:
-                            print "Please provide a message to the recipient."
+                            print "<" + recipient + "> is offline."
                     else:
                         print "Invalid recipient name."
                 else:
                     print "Invalid recipient name."
+
+            elif command == "dereg":
+                find = re.search('\S* (\S*)', input)
+                if find:
+                    deregnickname = find.group(1)
+                    if deregnickname == nickname:
+                        deregsocket = socket(AF_INET, SOCK_DGRAM)
+                        deregsocket.settimeout(.5)
+                        deregsocket.sendto("DEREG;" + nickname, (serverip, sPort))
+                        deregtimeout = False
+                        tries = 0
+                        while tries < 5:
+                            try:
+                                data, sender = deregsocket.recvfrom(1024)
+                            except timeout:
+                                tries += 1
+                                # print "try " + str(tries)
+                                if tries >= 5:
+                                    print ">>> [Server not responding]"
+                                    print ">>> [Exiting]"
+                                    deregtimeout = True
+                            else:
+                                print data
+                                break
+                        deregsocket.close()
+                        if deregtimeout is True:
+                            break
+                    else:
+                        print "Invalid nickname. You can only deregister yourself."
+                else:
+                    print "Please provide a nickname for dereg."
+
+            elif command == "reg":
+                find = re.search('\S* (\S*)', input)
+                if find:
+                    regnickname = find.group(1)
+                    if regnickname == nickname:
+                        regsocket = socket(AF_INET, SOCK_DGRAM)
+                        regsocket.settimeout(.5)
+                        regsocket.sendto("REG;" + nickname, (serverip, sPort))
+                        regtimeout = False
+                        tries = 0
+                        while tries < 5:
+                            try:
+                                data, sender = regsocket.recvfrom(1024)
+                            except timeout:
+                                tries += 1
+                                # print "try " + str(tries)
+                                if tries >= 5:
+                                    print ">>> [Server not responding]"
+                                    print ">>> [Exiting]"
+                                    regtimeout = True
+                            else:
+                                print data
+                                break
+                        regsocket.close()
+                        if regtimeout is True:
+                            break
+                    else:
+                        print "Invalid nickname. You can only deregister yourself."
+                else:
+                    print "Please provide a nickname for dereg."
+
             else:
                 print "<"+ command + "> is not a recognized command."
 
@@ -167,32 +233,39 @@ if mode == "server":
         print "client: ", client
         print "data: ", data
 
-        dataSplit = data.split(":")
+        dataSplit = data.split(";")
         action = dataSplit[0]
         nickname = dataSplit[1]
-        if action == "reg":
+        if action == "REG":
             #check if nickname exists and is active
             if nickname in clientTable.keys():
                 if clientTable[nickname]['active'] == True:
                     sSocket.sendto("[Client " + nickname + " exists!];" + json.dumps(clientTable), client)
                 else:
-                    clientTable[nickname]['active'] == True
+                    clientTable[nickname]['active'] = True
+                    sSocket.sendto(">>> [Welcome back, you are re-registered.]", client)
+                    server_clientTable_push()
             else:
                 #add new client to table
                 clientInfo = {
-                    'ip':client[0],
-                    'port':client[1],
-                    'active':True
+                    'ip': client[0],
+                    'port': client[1],
+                    'active': True
                 }
                 clientTable[nickname] = clientInfo
                 sSocket.sendto("[Welcome, You are registered.];" + json.dumps(clientTable), client)
                 server_clientTable_push()
+        elif action == "DEREG":
+            clientTable[nickname]['active'] = False
+            sSocket.sendto(">>> [You are Offline. Bye.];", client)
+            server_clientTable_push()
+
 
 elif mode == "client":
     cSocket = socket(AF_INET, SOCK_DGRAM)
     cSocket.settimeout(10)
     cSocket.bind(('', cPort))
-    cSocket.sendto("reg:" + nickname, (serverip,sPort))
+    cSocket.sendto("REG;" + nickname, (serverip, sPort))
     try:
         data, server = cSocket.recvfrom(1024)
         cSocket.close()
@@ -208,13 +281,13 @@ elif mode == "client":
     try:
         # start thread to listen to inbound traffic
         listensocket.bind(('', cPort))
-        clientListenThread = threading.Thread(target=client_listen, args = ())
+        clientListenThread = threading.Thread(target=client_listen, args=())
         clientListenThread.daemon = True
         clientListenThread.start()
 
         # start chat functionality
-        client_chat()
-
-    except (KeyboardInterrupt, SystemExit):
-        print "\nexiting"
+        client_commands()
+        exit()
+    except (KeyboardInterrupt):
+        print "\n[exiting]"
         exit()
