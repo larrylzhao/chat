@@ -1,13 +1,19 @@
 import os
+import datetime
 
 offlinedir = "offline/"
-if not os.path.exists(offlinedir):
+try:
     os.makedirs(offlinedir)
+except OSError:
+    pass
 client = "c2"
-op = 'w+'
-if os.path.exists(offlinedir+client):
-    op = 'a'
-f = open(offlinedir+client, op)
-f.write('hi there\n')  # python will convert \n to os.linesep
-f.write('hi there2\n')
+
+f = open(offlinedir+client, 'a+')
+f.write('hi there' + str(datetime.datetime.now()) + '\n')  # python will convert \n to os.linesep
+
 f.close()
+
+try:
+    os.remove(offlinedir+client)
+except OSError:
+    pass
