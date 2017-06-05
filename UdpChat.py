@@ -9,25 +9,52 @@ from socket import *
 
 mode = ""
 nickname = ""
+recipient = ""
 serverip = ""
 sPort = 0
 cPort = 0
 clientTable = {}
+listensocket = socket(AF_INET, SOCK_DGRAM)
+sSocket = socket(AF_INET, SOCK_DGRAM)
 
 def client_listen():
+    global listensocket
     global clientTable
-    listensocket = socket(AF_INET, SOCK_DGRAM)
-    listensocket.bind(('', cPort))
     while True:
-        data, server = listensocket.recvfrom(1024)
-        datasplit = data.split(";")
-        clientTable = json.loads(datasplit[1])
-        print datasplit[0]
-        print clientTable
+        # time.sleep(2) # test timeout
+        print "timeout: " + str(listensocket.gettimeout())
+        try:
+            data, sender = listensocket.recvfrom(1024)
+        except timeout:
+            print "No ACK from " + recipient + ", message sent to server."
+            #TODO send offline message to server
+        else:
+            if sender[0] == serverip and sender[1] == sPort:
+                # messages from server
+                datasplit = data.split(";")
+                clientTable = json.loads(datasplit[1])
+                print datasplit[0]
+                print clientTable
+            elif data != "ACK":
+                # messages from clients
+
+                listensocket.sendto("ACK", (sender[0],sender[1]))
+                for name in clientTable:
+                    if sender[0] == clientTable[name]['ip'] and sender[1] == clientTable[name]['port']:
+                        print name + ": " + data
+            else:
+                listensocket.settimeout(None)
+                for name in clientTable:
+                    if sender[0] == clientTable[name]['ip'] and sender[1] == clientTable[name]['port']:
+                        print "[Message received by <" + name + ">]."
         sys.stdout.write(">>> ")
         sys.stdout.flush()
 
+
+
 def client_message():
+    global recipient
+    global listensocket
     while True:
         input = raw_input('>>> ')
         find = re.search('(\S*)', input)
@@ -43,7 +70,10 @@ def client_message():
                         find = re.search('\S* \S* (.+)', input)
                         if find:
                             message = find.group(1)
-                            print "message: " + message
+                            recipientip = clientTable[recipient]['ip']
+                            recipientport = clientTable[recipient]['port']
+                            listensocket.settimeout(.5) #TODO fix errno 35
+                            listensocket.sendto( message, (recipientip,recipientport))
                         else:
                             print "Please provide a message to the recipient."
                     else:
@@ -54,11 +84,11 @@ def client_message():
                 print "<"+ command + "> is not a recognized command."
 
 def server_clientTable_push():
-    pushSocket = socket(AF_INET, SOCK_DGRAM)
+    # sSocket = socket(AF_INET, SOCK_DGRAM)
     for client in clientTable:
         if clientTable[client]['active'] is True:
-            pushSocket.sendto("[Client table updated.];" + json.dumps(clientTable), (clientTable[client]['ip'], clientTable[client]['port']))
-    pushSocket.close()
+            sSocket.sendto("[Client table updated.];" + json.dumps(clientTable), (clientTable[client]['ip'], clientTable[client]['port']))
+    # sSocket.close()
 
 """
 argument parser
@@ -134,8 +164,7 @@ if goodArgs is False:
 
 
 if mode == "server":
-    sSocket = socket(AF_INET, SOCK_DGRAM)
-    sSocket.bind(('', sPort))
+    sSocket.bind((serverip, sPort))
 
     while True:
         data, client = sSocket.recvfrom(1024)
@@ -181,6 +210,8 @@ elif mode == "client":
         exit()
 
     try:
+        listensocket.bind(('', cPort))
+        # listensocket.settimeout(.5)
         clientListenThread = threading.Thread(target=client_listen, args = ())
         clientListenThread.daemon = True
         clientListenThread.start()
