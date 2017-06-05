@@ -21,40 +21,27 @@ def client_listen():
     global listensocket
     global clientTable
     while True:
-        # time.sleep(2) # test timeout
-        print "timeout: " + str(listensocket.gettimeout())
-        try:
-            data, sender = listensocket.recvfrom(1024)
-        except timeout:
-            print "No ACK from " + recipient + ", message sent to server."
-            #TODO send offline message to server
-        else:
-            if sender[0] == serverip and sender[1] == sPort:
-                # messages from server
-                datasplit = data.split(";")
-                clientTable = json.loads(datasplit[1])
-                print datasplit[0]
-                print clientTable
-            elif data != "ACK":
-                # messages from clients
-
-                listensocket.sendto("ACK", (sender[0],sender[1]))
-                for name in clientTable:
-                    if sender[0] == clientTable[name]['ip'] and sender[1] == clientTable[name]['port']:
-                        print name + ": " + data
-            else:
-                listensocket.settimeout(None)
-                for name in clientTable:
-                    if sender[0] == clientTable[name]['ip'] and sender[1] == clientTable[name]['port']:
-                        print "[Message received by <" + name + ">]."
+        data, sender = listensocket.recvfrom(1024)
+        datasplit = data.split(";")
+        if sender[0] == serverip and sender[1] == sPort:
+            # messages from server
+            clientTable = json.loads(datasplit[1])
+            print datasplit[0]
+            print clientTable
+        elif datasplit[0] == "CHAT":
+            # chat messages from clients
+            listensocket.sendto("ACK", (sender[0],sender[1]))
+            find = re.search('^CHAT;'+datasplit[1]+';(.*)', data)
+            if find:
+                message = find.group(1)
+                print datasplit[1] + ": " + message
         sys.stdout.write(">>> ")
         sys.stdout.flush()
 
 
 
-def client_message():
+def client_chat():
     global recipient
-    global listensocket
     while True:
         input = raw_input('>>> ')
         find = re.search('(\S*)', input)
@@ -69,11 +56,22 @@ def client_message():
                     elif recipient in clientTable.keys():
                         find = re.search('\S* \S* (.+)', input)
                         if find:
-                            message = find.group(1)
+                            message = "CHAT;" + nickname + ";" + find.group(1)
                             recipientip = clientTable[recipient]['ip']
                             recipientport = clientTable[recipient]['port']
-                            listensocket.settimeout(.5) #TODO fix errno 35
-                            listensocket.sendto( message, (recipientip,recipientport))
+                            chatsocket = socket(AF_INET, SOCK_DGRAM)
+                            chatsocket.settimeout(.5) #TODO fix errno 35
+                            chatsocket.sendto(message, (recipientip,recipientport))
+                            try:
+                                data, sender = chatsocket.recvfrom(1024)
+                            except timeout:
+                                print "No ACK from " + recipient + ", message sent to server."
+                                #TODO send offline message to server
+                            else:
+                                for name in clientTable:
+                                    if sender[0] == clientTable[name]['ip'] and sender[1] == clientTable[name]['port']:
+                                        print "[Message received by <" + name + ">]."
+                            chatsocket.close()
                         else:
                             print "Please provide a message to the recipient."
                     else:
@@ -84,17 +82,15 @@ def client_message():
                 print "<"+ command + "> is not a recognized command."
 
 def server_clientTable_push():
-    # sSocket = socket(AF_INET, SOCK_DGRAM)
     for client in clientTable:
         if clientTable[client]['active'] is True:
             sSocket.sendto("[Client table updated.];" + json.dumps(clientTable), (clientTable[client]['ip'], clientTable[client]['port']))
-    # sSocket.close()
 
 """
 argument parser
-./UdpChat.py -c client1 127.0.0.1 6000 6061
-./UdpChat.py -c client2 127.0.0.1 6000 6062
-./UdpChat.py -c client3 127.0.0.1 6000 6063
+./UdpChat.py -c c1 127.0.0.1 6000 6061
+./UdpChat.py -c c2 127.0.0.1 6000 6062
+./UdpChat.py -c c3 127.0.0.1 6000 6063
 ./UdpChat.py -s 6000
 """
 goodArgs = True
@@ -210,13 +206,14 @@ elif mode == "client":
         exit()
 
     try:
+        # start thread to listen to inbound traffic
         listensocket.bind(('', cPort))
-        # listensocket.settimeout(.5)
         clientListenThread = threading.Thread(target=client_listen, args = ())
         clientListenThread.daemon = True
         clientListenThread.start()
 
-        client_message()
+        # start chat functionality
+        client_chat()
 
     except (KeyboardInterrupt, SystemExit):
         print "\nexiting"
