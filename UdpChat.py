@@ -28,7 +28,10 @@ def client_listen():
         datasplit = data.split(";")
         if sender[0] == serverip and sender[1] == sPort:
             # messages from server
-            clientTable = json.loads(datasplit[1])
+            try:
+                clientTable = json.loads(datasplit[1])
+            except:
+                pass
             print datasplit[0]
             # print clientTable
         elif datasplit[0] == "CHAT":
@@ -285,6 +288,18 @@ if mode == "server":
                         clientTable[nickname]['active'] = True
                         sSocket.sendto(">>> [Welcome back, you are re-registered.]", client)
                         server_clientTable_push()
+                        # check if client has offline messages waiting
+                        try:
+                            with open(offlinedir+nickname) as f:
+                                content = f.readlines()
+                            os.remove(offlinedir+nickname)
+                        except:
+                            pass
+                        else:
+                            content = [x.strip() for x in content]
+                            sSocket.sendto("[You have messages.]", (clientTable[nickname]['ip'], clientTable[nickname]['port']))
+                            for message in content:
+                                sSocket.sendto(message, (clientTable[nickname]['ip'], clientTable[nickname]['port']))
                 else:
                     #add new client to table
                     clientInfo = {
@@ -297,7 +312,7 @@ if mode == "server":
                     server_clientTable_push()
             elif command == "DEREG":
                 clientTable[nickname]['active'] = False
-                sSocket.sendto(">>> [You are Offline. Bye.];", client)
+                sSocket.sendto(">>> [You are Offline. Bye.]", client)
                 server_clientTable_push()
             elif command == "CHAT":
                 # save messages to files
@@ -313,6 +328,7 @@ if mode == "server":
         print "\n[exiting]"
         try:
             shutil.rmtree(offlinedir)
+            os.remove(offlinedir)
         except OSError:
             pass
         exit()
