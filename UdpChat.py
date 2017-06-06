@@ -8,6 +8,7 @@ import json
 from socket import *
 import os
 import datetime
+import shutil
 
 mode = ""
 nickname = ""
@@ -29,7 +30,7 @@ def client_listen():
             # messages from server
             clientTable = json.loads(datasplit[1])
             print datasplit[0]
-            print clientTable
+            # print clientTable
         elif datasplit[0] == "CHAT":
             # chat messages from clients
             listensocket.sendto("ACK", (sender[0],sender[1]))
@@ -40,8 +41,8 @@ def client_listen():
         sys.stdout.write(">>> ")
         sys.stdout.flush()
 
-def offline_chat(message):
 
+def offline_chat(message):
     # send offline message to server
     chatsocket = socket(AF_INET, SOCK_DGRAM)
     chatsocket.settimeout(.5)
@@ -64,6 +65,7 @@ def offline_chat(message):
     chatsocket.close()
     return chattimeout
 
+
 def client_commands():
     global recipient
     while True:
@@ -71,46 +73,49 @@ def client_commands():
         find = re.search('(\S*)', input)
         if find:
             command = find.group(1)
-            if command == "chat":
-                find = re.search('\S* (\S*)', input)
-                if find:
-                    recipient = find.group(1)
-                    if recipient == nickname:
-                        print "Cannot send message to yourself."
-                    elif recipient in clientTable.keys():
-                        find = re.search('\S* \S* (.+)', input)
-                        if find:
-                            message = "CHAT;" + nickname + ";" + recipient + ";" + find.group(1)
-                            if clientTable[recipient]['active'] is True:
-                                recipientip = clientTable[recipient]['ip']
-                                recipientport = clientTable[recipient]['port']
-                                chatsocket = socket(AF_INET, SOCK_DGRAM)
-                                chatsocket.settimeout(.5)
-                                chatsocket.sendto(message, (recipientip, recipientport))
-                                try:
-                                    data, sender = chatsocket.recvfrom(1024)
-                                except timeout:
-                                    print ">>> No ACK from <" + recipient + ">, message sent to server."
+            if command == "send":
+                if clientTable[nickname]['active'] is False:
+                    print "You are not registered."
+                else:
+                    find = re.search('\S* (\S*)', input)
+                    if find:
+                        recipient = find.group(1)
+                        if recipient == nickname:
+                            print "Cannot send message to yourself."
+                        elif recipient in clientTable.keys():
+                            find = re.search('\S* \S* (.+)', input)
+                            if find:
+                                message = "CHAT;" + nickname + ";" + recipient + ";" + find.group(1)
+                                if clientTable[recipient]['active'] is True:
+                                    recipientip = clientTable[recipient]['ip']
+                                    recipientport = clientTable[recipient]['port']
+                                    chatsocket = socket(AF_INET, SOCK_DGRAM)
+                                    chatsocket.settimeout(.5)
+                                    chatsocket.sendto(message, (recipientip, recipientport))
+                                    try:
+                                        data, sender = chatsocket.recvfrom(1024)
+                                    except timeout:
+                                        print ">>> [No ACK from <" + recipient + ">, message sent to server.]"
+                                        chattimeout = offline_chat(message)
+                                        if chattimeout is True:
+                                            break
+                                    else:
+                                        for name in clientTable:
+                                            if sender[0] == clientTable[name]['ip'] and sender[1] == clientTable[name]['port']:
+                                                print ">>> [Message received by <" + name + ">.]"
+                                    chatsocket.close()
+
+                                else:
+                                    print ">>> <" + recipient + "> is offline, message sent to server."
                                     chattimeout = offline_chat(message)
                                     if chattimeout is True:
                                         break
-                                else:
-                                    for name in clientTable:
-                                        if sender[0] == clientTable[name]['ip'] and sender[1] == clientTable[name]['port']:
-                                            print "[Message received by <" + name + ">]."
-                                chatsocket.close()
-
                             else:
-                                print ">>> <" + recipient + "> is offline, message sent to server."
-                                chattimeout = offline_chat(message)
-                                if chattimeout is True:
-                                    break
+                                print "Please provide a message to the recipient."
                         else:
-                            print "Please provide a message to the recipient."
+                            print "Invalid recipient name."
                     else:
                         print "Invalid recipient name."
-                else:
-                    print "Invalid recipient name."
 
             elif command == "dereg":
                 find = re.search('\S* (\S*)', input)
@@ -256,42 +261,61 @@ if goodArgs is False:
 
 
 if mode == "server":
-    sSocket.bind((serverip, sPort))
+    try:
+        sSocket.bind((serverip, sPort))
+        offlinedir = "offline/"
+        try:
+            os.makedirs(offlinedir)
+        except OSError:
+            pass
+        while True:
+            data, client = sSocket.recvfrom(1024)
+            print "client: ", client
+            print "data: ", data
 
-    while True:
-        data, client = sSocket.recvfrom(1024)
-        print "client: ", client
-        print "data: ", data
-
-        dataSplit = data.split(";")
-        command = dataSplit[0]
-        nickname = dataSplit[1]
-        if command == "REG":
-            #check if nickname exists and is active
-            if nickname in clientTable.keys():
-                if clientTable[nickname]['active'] == True:
-                    sSocket.sendto("[Client " + nickname + " exists!];" + json.dumps(clientTable), client)
+            datasplit = data.split(";")
+            command = datasplit[0]
+            nickname = datasplit[1]
+            if command == "REG":
+                #check if nickname exists and is active
+                if nickname in clientTable.keys():
+                    if clientTable[nickname]['active'] == True:
+                        sSocket.sendto("[Client " + nickname + " exists!];" + json.dumps(clientTable), client)
+                    else:
+                        clientTable[nickname]['active'] = True
+                        sSocket.sendto(">>> [Welcome back, you are re-registered.]", client)
+                        server_clientTable_push()
                 else:
-                    clientTable[nickname]['active'] = True
-                    sSocket.sendto(">>> [Welcome back, you are re-registered.]", client)
+                    #add new client to table
+                    clientInfo = {
+                        'ip': client[0],
+                        'port': client[1],
+                        'active': True
+                    }
+                    clientTable[nickname] = clientInfo
+                    sSocket.sendto("[Welcome, You are registered.];" + json.dumps(clientTable), client)
                     server_clientTable_push()
-            else:
-                #add new client to table
-                clientInfo = {
-                    'ip': client[0],
-                    'port': client[1],
-                    'active': True
-                }
-                clientTable[nickname] = clientInfo
-                sSocket.sendto("[Welcome, You are registered.];" + json.dumps(clientTable), client)
+            elif command == "DEREG":
+                clientTable[nickname]['active'] = False
+                sSocket.sendto(">>> [You are Offline. Bye.];", client)
                 server_clientTable_push()
-        elif command == "DEREG":
-            clientTable[nickname]['active'] = False
-            sSocket.sendto(">>> [You are Offline. Bye.];", client)
-            server_clientTable_push()
-        elif command == "CHAT":
-            #TODO save messages to files
-            sSocket.sendto(">>> [Messages received by the server and saved.]", client)
+            elif command == "CHAT":
+                # save messages to files
+                sSocket.sendto(">>> [Messages received by the server and saved.]", client)
+                find = re.search('^CHAT;'+datasplit[1]+';'+datasplit[2]+';(.*)', data)
+                if find:
+                    message = nickname + ": <" + str(datetime.datetime.now()) + "> " + find.group(1)
+                    f = open(offlinedir + datasplit[2], 'a+')
+                    f.write(message + '\n')
+                    f.close()
+
+    except (KeyboardInterrupt):
+        print "\n[exiting]"
+        try:
+            shutil.rmtree(offlinedir)
+        except OSError:
+            pass
+        exit()
 
 
 elif mode == "client":

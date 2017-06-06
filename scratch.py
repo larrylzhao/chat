@@ -1,5 +1,6 @@
 import os
 import datetime
+import shutil
 
 offlinedir = "offline/"
 try:
@@ -9,11 +10,11 @@ except OSError:
 client = "c2"
 
 f = open(offlinedir+client, 'a+')
-f.write('hi there' + str(datetime.datetime.now()) + '\n')  # python will convert \n to os.linesep
+f.write('hi there' + str(datetime.datetime.now()) + '\n')
 
 f.close()
 
 try:
-    os.remove(offlinedir+client)
+    shutil.rmtree(offlinedir)
 except OSError:
     pass
