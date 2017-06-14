@@ -1,8 +1,16 @@
 #!/usr/bin/python
+#####################################################################
+#                                                                   #
+#       Simple UDP Chat App                                         #
+#       CSEEW4119                                                   #
+#       Author: Larry Zhao                                          #
+#       UNI: LZ2479                                                 #
+#       github: larrylzhao/chat                                     #
+#                                                                   #
+#####################################################################
 
 import sys
 import threading
-import time
 import re
 import json
 from socket import *
@@ -20,6 +28,10 @@ clientTable = {}
 listensocket = socket(AF_INET, SOCK_DGRAM)
 sSocket = socket(AF_INET, SOCK_DGRAM)
 
+
+"""
+Thread for client to listen for incoming UDP messages
+"""
 def client_listen():
     global listensocket
     global clientTable
@@ -33,7 +45,6 @@ def client_listen():
             except:
                 pass
             print datasplit[0]
-            # print clientTable
         elif datasplit[0] == "CHAT":
             # chat messages from clients
             listensocket.sendto("ACK", (sender[0],sender[1]))
@@ -45,8 +56,10 @@ def client_listen():
         sys.stdout.flush()
 
 
+"""
+Send offline message to server
+"""
 def offline_chat(message):
-    # send offline message to server
     chatsocket = socket(AF_INET, SOCK_DGRAM)
     chatsocket.settimeout(.5)
     chatsocket.sendto(message, (serverip, sPort))
@@ -57,7 +70,6 @@ def offline_chat(message):
             data, sender = chatsocket.recvfrom(1024)
         except timeout:
             tries += 1
-            # print "try " + str(tries)
             if tries >= 5:
                 print ">>> [Server not responding]"
                 print ">>> [Exiting]"
@@ -69,6 +81,9 @@ def offline_chat(message):
     return chattimeout
 
 
+"""
+handler for client input
+"""
 def client_commands():
     global recipient
     while True:
@@ -135,7 +150,6 @@ def client_commands():
                                 data, sender = deregsocket.recvfrom(1024)
                             except timeout:
                                 tries += 1
-                                # print "try " + str(tries)
                                 if tries >= 5:
                                     print ">>> [Server not responding]"
                                     print ">>> [Exiting]"
@@ -166,7 +180,6 @@ def client_commands():
                                 data, sender = regsocket.recvfrom(1024)
                             except timeout:
                                 tries += 1
-                                # print "try " + str(tries)
                                 if tries >= 5:
                                     print ">>> [Server not responding]"
                                     print ">>> [Exiting]"
@@ -185,13 +198,20 @@ def client_commands():
             else:
                 print "<"+ command + "> is not a recognized command."
 
+
+"""
+server function to push client table to clients
+"""
 def server_clientTable_push():
     for client in clientTable:
         if clientTable[client]['active'] is True:
             sSocket.sendto("[Client table updated.];" + json.dumps(clientTable), (clientTable[client]['ip'], clientTable[client]['port']))
 
+
 """
 argument parser
+
+sample executions:
 ./UdpChat.py -c c1 127.0.0.1 6000 6061
 ./UdpChat.py -c c2 127.0.0.1 6000 6062
 ./UdpChat.py -c c3 127.0.0.1 6000 6063
@@ -200,7 +220,7 @@ argument parser
 goodArgs = True
 if len(sys.argv) > 1:
     if sys.argv[1] == "-s":
-        #server mode
+        # server mode
         mode = "server"
         if len(sys.argv) > 2:
             sPort = int(sys.argv[2])
@@ -213,7 +233,7 @@ if len(sys.argv) > 1:
             print "please give a server port number between 1024 and 65535"
             exit()
     elif sys.argv[1] == "-c":
-        #client mode
+        # client mode
         mode = "client"
         if len(sys.argv) > 2:
             nickname = sys.argv[2]
@@ -351,7 +371,6 @@ elif mode == "client":
         clientTable = json.loads(datasplit[1])
         print ">>> " + str(datasplit[0])
         print ">>> [Client table updated.]"
-        # print clientTable
     except timeout:
         print 'REGISTRATION REQUEST TIMED OUT AFTER 10 SECONDS'
         exit()
