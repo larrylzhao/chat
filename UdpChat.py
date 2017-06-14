@@ -224,7 +224,12 @@ if len(sys.argv) > 1:
 
         if len(sys.argv) > 3:
             serverip = sys.argv[3]
-            #TODO check if server ip is valid string
+            # check if server ip is valid string
+            try:
+                inet_aton(serverip)
+            except:
+                print "please provide a valid server ip"
+                exit()
             print "server ip: ", serverip
         else:
             print "please give a server ip"
